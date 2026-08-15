@@ -1,7 +1,6 @@
 # Phase 1 — Review Data Source Evaluation
 
 Evidence-based evaluation of candidate review-data sources for Phase 1 ingestion.
-Prepared for John · updated 2026-08.
 
 ## The framing 
 
