@@ -38,6 +38,7 @@ Template to copy for each source:
 - **Rating shape:** boolean `voted_up` (thumbs up/down), NOT a 1-5 star scale -- note this, it matters for cross-source comparability
 - **Quality flags:** `steam_purchase`, `received_for_free`, `votes_up`, `votes_funny`, `weighted_vote_score`, `author.playtime_forever`
 - **⚠️ Scoping trap (measured):** `query_summary.total_reviews` moves by ~192× depending on two params with non-obvious defaults. Steam's default `purchase_type=steam` excludes non-purchasers, which for a free-to-play title like Dota 2 hides almost the entire corpus: 14,380 scoped vs 2,757,984 unscoped. Any recurring pipeline must pin `language` and `purchase_type` explicitly or its volume numbers are silently wrong.
+- **Data-quality limits noticed:** multilingual corpus (`language` field varies; must be filtered or handled downstream), and `refunded` / `received_for_free` / `written_during_early_access` rows are all included by default — each is a deliberate inclusion/exclusion decision for a pipeline, not a given. `weighted_vote_score` returns as a string, not a float.
 - **Raw sample saved to:** `samples/steam_dota2.json`
 
 ## Apple App Store
@@ -46,14 +47,14 @@ Template to copy for each source:
 - **Item sampled:** app id 284882215 (us storefront)
 - **Fields actually returned (raw entry keys):** author, content, id, im:contentType, im:rating, im:version, im:voteCount, im:voteSum, link, title, updated
 - **Rows returned per page:** [50, 0] (page-by-page, not an average) — 50 rows total across 1 non-empty page(s)
-- **Pagination behavior:** `page=<n>` path segment. Last page with rows = page 1; end of feed signalled by an empty page. Probed to 15 pages, so the ~10-page cap claim IS tested here.
+- **Pagination behavior:** `page=<n>` path segment. Last page with rows = page 1; end of feed signalled by an empty page. ⚠️ Probe was allowed 15 pages but this app's feed ran out at page 2, so the ~10-page cap was never reached and remains UNTESTED. What is measured here is this app's feed depth, not Apple's cap.
 - **Total corpus size (volume unit B):** ⚠️ NOT EXPOSED. The RSS feed publishes no review-count total for an app, so the addressable corpus size is unknowable from this source — you can only report what you pulled. This is a real asymmetry vs Steam (which reports `total_reviews`) and it limits any volume comparison.
 - **Reviews / representative item (volume unit A):** 50 retrieved; this IS the ceiling for this app (probe walked to exhaustion).
 - **Repeatability:** re-pulled page 1 after ~2s: 50/50 same IDs, identical order = True
 - **ID scheme:** review = `id.label` (numeric review id); item = Apple `trackId`/app id; author has a `uri` but no stable public user id
 - **Rating shape:** 1-5 stars. Observed in sample: {'1': 20, '2': 7, '3': 3, '4': 2, '5': 18} (⚠️ sortby=mostrecent, so this is a RECENCY-BIASED window of 50 reviews, not the app's lifetime rating distribution — do not present it as one)
 - **Quality flags:** `im:voteCount` / `im:voteSum` present; NO verified-purchase flag; app metadata entry on page 1 = False
-- **Data-quality limits noticed:** storefront-scoped (one country per pull), no verified-purchase flag, no corpus-size total, recency-biased ordering, legacy/undocumented endpoint, page cap confirmed by probe
+- **Data-quality limits noticed:** storefront-scoped (one country per pull), no verified-purchase flag, no corpus-size total, recency-biased ordering, legacy/undocumented endpoint, shallow feed depth: only 50 reviews retrievable for this app (page cap NOT tested — omitted on purpose)
 - **Maintenance/access risk:** HIGH-ish -- this RSS feed is a legacy, undocumented endpoint Apple does not publish support guarantees for. Record it as observed behavior, not a documented contract.
 - **Raw sample saved to:** `samples/apple_facebook.json`
 
@@ -61,7 +62,20 @@ Template to copy for each source:
 - **Pull date:** TBD (Sat 8/15)
 
 ## Google Play
-- **Pull date:** TBD (Sat 8/15)
+- **Pull date:** 2026-08-15
+- **Endpoint / file used:** google-play-scraper -> Google internal `batchexecute` (UNDOCUMENTED, no public reviews API exists)
+- **Item sampled:** com.facebook.katana (us/en)
+- **Fields actually returned:** appVersion, at, content, repliedAt, replyContent, reviewCreatedVersion, reviewId, score, thumbsUpCount, userImage, userName
+- **Rows returned in one call:** 200 (requested 200)
+- **Pagination behavior:** continuation token returned after 200 rows (token present = True); page size is capped per call, paging is opaque-cursor based
+- **Repeatability:** re-pulled first 50 after ~2s: 50/50 same IDs, identical order = True
+- **ID scheme:** review = `reviewId` (opaque string); item = package name; user = display name only, NO stable user id
+- **Rating shape:** 1-5 integer `score`. Observed: {1: 40, 2: 6, 3: 12, 4: 10, 5: 132}
+- **Quality flags:** `thumbsUpCount` present; NO verified-purchase flag; developer replies on 0/200 rows
+- **Data-quality limits noticed:** locale-scoped, no user id, display names are not unique, sort=NEWEST means the window moves between pulls
+- **Maintenance/access risk:** HIGH -- unofficial access to an internal endpoint; can break without notice
+- **Licensing / permitted use:** NOT cleared -- no sanctioned read API. Score this column as 'needs-check / likely not permitted', not blank.
+- **Raw sample saved to:** `samples/googleplay_facebook.json`
 
 ## Best Buy
 - **Pull date:** TBD (Sat 8/15, optional)

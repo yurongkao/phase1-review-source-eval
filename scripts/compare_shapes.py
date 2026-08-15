@@ -122,6 +122,24 @@ def rating_shape(payload, cmap):
     return ("none", "no rating field found in the sampled rows")
 
 
+def pagination_summary(payload):
+    """Prefer an explicit note. Otherwise summarise the log -- taking log[-1] blindly
+    grabs whatever trailing indented remark the sampler happened to print
+    ('  -> page 2 empty...'), which reads as gibberish in the deliverable."""
+    if payload.get("pagination_note"):
+        return payload["pagination_note"]
+    log = payload.get("pagination_log") or []
+    page_lines = [l for l in log if l.strip().lower().startswith("page ")]
+    if not page_lines:
+        return "not recorded"
+    tail = [l for l in log if l.strip().startswith("->") or "stop" in l.lower()
+            or "exhaust" in l.lower()]
+    summary = f"{len(page_lines)} page request(s): " + "; ".join(l.strip() for l in page_lines)
+    if tail:
+        summary += f" — ended: {tail[-1].strip().lstrip('-> ')}"
+    return summary
+
+
 def json_type(rating_desc):
     """Pull the 'json type: X' tag back out of a rating description."""
     marker = "json type: "
@@ -156,8 +174,7 @@ def describe(path):
         "rating_kind": kind,
         "rating": desc,
         "item_id": item_id_note(p, cmap),
-        "pagination": p.get("pagination_note")
-                      or (p.get("pagination_log") or ["not recorded"])[-1],
+        "pagination": pagination_summary(p),
         "repeatability": p.get("repeatability", "not recorded"),
     }
 

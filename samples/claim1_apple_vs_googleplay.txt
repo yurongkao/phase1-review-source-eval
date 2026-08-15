@@ -1,0 +1,50 @@
+==============================================================================
+CLAIM UNDER TEST: Apple RSS mirrors Google Play field shape
+==============================================================================
+A = apple_app_store_rss  (50 reviews, ../samples/apple_facebook.json)
+B = google_play  (200 reviews, ../samples/googleplay_facebook.json)
+
+concept             A field                   B field                   match
+------------------------------------------------------------------------------
+review_id           id                        reviewId                  both
+item_id             -                         -                         neither
+user_id             author                    userName                  both
+rating              rating                    score                     both
+recommend_bool      -                         -                         neither
+title               title                     -                         A only
+body                content                   content                   both
+timestamp           updated                   at                        both
+helpful_votes       vote_count                thumbsUpCount             both
+verified_purchase   -                         -                         neither
+app_version         version                   reviewCreatedVersion      both
+language            -                         -                         neither
+developer_reply     -                         replyContent              B only
+------------------------------------------------------------------------------
+shared concepts: 7   A-only: 1   B-only: 1
+
+Fields in A with no canonical mapping: ['vote_sum']
+Fields in B with no canonical mapping: ['appVersion', 'repliedAt', 'userImage']
+
+NOT just fields -- these decide whether one pipeline can serve both:
+  rating shape   A: numeric 1-5 via `rating` (json type: str), distinct values: ['1', '2', '3', '4', '5']
+                 B: numeric 1-5 via `score` (json type: int), distinct values: ['1', '2', '3', '4', '5']
+  item identity  A: envelope-level only (`appid` = 284882215) -- constant per pull, must be stamped onto rows during ingestion
+                 B: envelope-level only (`appid` = com.facebook.katana) -- constant per pull, must be stamped onto rows during ingestion
+  pagination     A: 2 page request(s): page 1: 50 reviews; page 2: 0 reviews — ended: page 2 empty, feed exhausted here
+                 B: continuation token returned after 200 rows (token present = True); page size is capped per call, paging is opaque-cursor based
+  repeatability  A: re-pulled page 1 after ~2s: 50/50 same IDs, identical order = True
+                 B: re-pulled first 50 after ~2s: 50/50 same IDs, identical order = True
+
+Concrete differences a reuse claim has to answer:
+  - both ratings are numeric but arrive as different JSON types (str vs int) -- same scale, different parse; cheap to fix, but it is a difference, so record it rather than calling the shapes identical
+  - review-id keys differ (id vs reviewId) -- trivial to alias, note it anyway
+
+==============================================================================
+DRAFT FOR test_notes.md (edit the verdict yourself -- do not paste blind)
+==============================================================================
+- **apple_app_store_rss fields:** author, content, id, rating, title, updated, version, vote_count, vote_sum
+- **google_play fields:** appVersion, at, content, repliedAt, replyContent, reviewCreatedVersion, reviewId, score, thumbsUpCount, userImage, userName
+- **Shared concepts:** 7 of 13 (review_id, user_id, rating, body, timestamp, helpful_votes, app_version)
+- **Actual differences:** rating shape numeric 1-5 via `rating` (json type: str), distinct values: ['1', '2', '3', '4', '5'] vs numeric 1-5 via `score` (json type: int), distinct values: ['1', '2', '3', '4', '5']; pagination 2 page request(s): page 1: 50 reviews; page 2: 0 reviews — ended: page 2 empty, feed exhausted here vs continuation token returned after 200 rows (token present = True); page size is capped per call, paging is opaque-cursor based; unmatched fields A=['vote_sum'], B=['appVersion', 'repliedAt', 'userImage']
+- **Verdict:** <your call. Say what reuse WOULD require -- e.g. 'same extraction logic, separate rating-normalization and pagination adapters' -- rather than 'similar'.>
+==============================================================================
