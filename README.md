@@ -56,8 +56,11 @@ Two separate, clearly-defined columns — never app-counts as a volume proxy:
 
 ## Status
 
-- [x] Repo skeleton + scorecard scaffold (Thu 8/13)
-- [ ] Steam + Apple RSS samples (Fri 8/14)
-- [ ] Amazon slice + Google Play / Best Buy samples; test the two claims (Sat 8/15)
-- [ ] Fill scorecard from evidence + two recommendations + polish (Sun 8/16)
-- [ ] Final review + send update (Mon 8/17)
+- [x] Repo skeleton + scorecard scaffold
+- [ ] Steam + Apple RSS samples
+- [ ] Amazon slice + Google Play / Best Buy samples
+- [ ] Test the two cross-source claims
+- [ ] Fill scorecard from evidence + write the two recommendations
+
+Sources not yet sampled are marked **"not sampled — pending"** in the scorecard rather
+than filled from documentation. Documentation-based cells are labelled as such.

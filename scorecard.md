@@ -24,7 +24,7 @@ on a real sample pull is marked **TBD — pending sample** and gets filled Fri�
 | ID scheme | TBD — pending sample | TBD — pending sample | TBD — pending sample | TBD — pending sample | TBD — pending sample |
 | Main data-quality limits | TBD — pending sample | TBD — pending sample | TBD — pending sample | TBD — pending sample | TBD — pending sample |
 | Domain represented | PC games | Mobile apps | E-commerce products | Mobile apps | Consumer electronics retail |
-| Maintenance / access risk | Unofficial endpoint may change | Feed format may change | Low (static) | High (unofficial, breaks) | Key/quota + ToS |
+| Maintenance / access risk | Low–moderate — **documented** partner endpoint (`partner.steamgames.com/doc/store/getreviews`) | Moderate–high — legacy RSS feed, undocumented, no published support guarantee | Low — static, versioned snapshot | **High** — unofficial access to an internal endpoint; can change without notice | Low–moderate — documented API; key/quota + ToS |
 | **Licensing / permitted use** | TBD — confirm ToS (commercial?) | TBD — confirm ToS | TBD — check dataset license + redistribution | TBD — ToS risk | TBD — API ToS |
 | **Fit — A: recurring collection** | TBD | TBD | Low (static, no new data) | TBD | TBD |
 | **Fit — B: downstream analysis** | TBD | TBD | High (size + fields) | TBD | TBD |
