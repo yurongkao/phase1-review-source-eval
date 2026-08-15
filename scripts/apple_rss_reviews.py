@@ -73,8 +73,14 @@ def parse_entries(feed: dict) -> tuple[list, list, bool]:
     return reviews, sorted(raw_keys), had_meta
 
 
-def collect(appid: int, pages: int, country: str) -> tuple[list, list, list, bool]:
-    reviews, log, raw_keys, had_meta = [], [], [], False
+def collect(appid: int, pages: int, country: str) -> tuple[list, list, list, bool, list]:
+    """Also returns per_page: the row count for EACH page.
+
+    Reporting an average across pages is misleading when the last page is empty --
+    a 50/0 split averages to '~25 per page', which describes neither page and
+    understates the real page size by half.
+    """
+    reviews, log, raw_keys, had_meta, per_page = [], [], [], False, []
     for page in range(1, pages + 1):
         try:
             feed = fetch_page(appid, page, country)
@@ -85,12 +91,13 @@ def collect(appid: int, pages: int, country: str) -> tuple[list, list, list, boo
         if page == 1:
             raw_keys, had_meta = keys, meta
         reviews.extend(batch)
+        per_page.append(len(batch))
         log.append(f"page {page}: {len(batch)} reviews")
         if not batch:
             log.append(f"  -> page {page} empty, feed exhausted here")
             break
         time.sleep(1)
-    return reviews, log, raw_keys, had_meta
+    return reviews, log, raw_keys, had_meta, per_page
 
 
 def main() -> None:
@@ -106,7 +113,7 @@ def main() -> None:
 
     pages = 15 if args.probe_cap else args.pages
     try:
-        reviews, log, raw_keys, had_meta = collect(args.appid, pages, args.country)
+        reviews, log, raw_keys, had_meta, per_page = collect(args.appid, pages, args.country)
     except NetworkProblem as exc:
         raise SystemExit(
             f"NETWORK FAILURE, not a data finding: {exc}\n"
@@ -116,12 +123,16 @@ def main() -> None:
 
     for line in log:
         print(line)
-    pages_that_worked = sum(1 for line in log if "reviews" in line and "stopped" not in line)
+    # Only pages that actually returned rows count as "working". An empty page is
+    # where the feed ENDED, not a page that worked.
+    pages_that_worked = sum(1 for n in per_page if n > 0)
+    hit_empty = any(n == 0 for n in per_page)
+    hit_http_stop = any("stopped" in line for line in log)
 
     repeat_note = "not tested (pass --repeat)"
     if args.repeat and reviews:
         time.sleep(2)
-        again, _, _, _ = collect(args.appid, 1, args.country)
+        again, _, _, _, _ = collect(args.appid, 1, args.country)
         first_ids = [r["id"] for r in reviews[:len(again)]]
         again_ids = [r["id"] for r in again]
         overlap = len(set(first_ids) & set(again_ids))
@@ -157,20 +168,53 @@ def main() -> None:
     print(f"- **Endpoint used:** {TMPL.format(country=args.country, page='<n>', appid=args.appid)}")
     print(f"- **Item sampled:** app id {args.appid} ({args.country} storefront)")
     print(f"- **Fields actually returned (raw entry keys):** {', '.join(raw_keys)}")
-    print(f"- **Rows returned per page:** ~{len(reviews) // max(pages_that_worked, 1)} "
-          f"(total {len(reviews)} across {pages_that_worked} page(s))")
-    print(f"- **Pagination behavior:** `page=<n>` path segment; feed stopped returning "
-          f"reviews after page {pages_that_worked}"
-          + (" (probed up to 15 -- this TESTS the ~10-page cap claim)" if args.probe_cap
-             else f" (only requested {args.pages}; re-run with --probe-cap to test the cap)"))
+    print(f"- **Rows returned per page:** {per_page} (page-by-page, not an average) — "
+          f"{len(reviews)} rows total across {pages_that_worked} non-empty page(s)")
+    stop_reason = ("an HTTP error from Apple" if hit_http_stop
+                   else "an empty page" if hit_empty
+                   else "NOT reached — still returning rows when the probe ended")
+    # A probe only TESTS the ~10-page cap if it actually got deep enough to hit it.
+    # If the app ran out of reviews at page 2, the cap was never exercised -- saying
+    # "probed to 15 pages, cap tested" would be false, and this whole deliverable is
+    # about not making claims the evidence does not support.
+    cap_reached = pages_that_worked >= 10 or hit_http_stop
+    if not args.probe_cap:
+        cap_note = (f" ⚠️ Only {args.pages} page(s) requested — the ~10-page cap is NOT "
+                    f"tested; do not state it as a limit. Re-run with --probe-cap.")
+    elif cap_reached:
+        cap_note = (f" Probe walked deep enough to exercise the ~10-page cap: it stopped "
+                    f"at page {pages_that_worked} via {stop_reason}. Cap TESTED.")
+    else:
+        cap_note = (f" ⚠️ Probe was allowed 15 pages but this app's feed ran out at page "
+                    f"{pages_that_worked + 1}, so the ~10-page cap was never reached and "
+                    f"remains UNTESTED. What is measured here is this app's feed depth, "
+                    f"not Apple's cap — those are different claims.")
+    print(f"- **Pagination behavior:** `page=<n>` path segment. Last page with rows = "
+          f"page {pages_that_worked}; end of feed signalled by {stop_reason}.{cap_note}")
+    print(f"- **Total corpus size (volume unit B):** ⚠️ NOT EXPOSED. The RSS feed "
+          f"publishes no review-count total for an app, so the addressable corpus size "
+          f"is unknowable from this source — you can only report what you pulled. This "
+          f"is a real asymmetry vs Steam (which reports `total_reviews`) and it limits "
+          f"any volume comparison.")
+    print(f"- **Reviews / representative item (volume unit A):** {len(reviews)} retrieved"
+          + ("; this IS the ceiling for this app (probe walked to exhaustion)."
+             if args.probe_cap and (hit_empty or hit_http_stop)
+             else "; ceiling untested at this depth."))
     print(f"- **Repeatability:** {repeat_note}")
     print("- **ID scheme:** review = `id.label` (numeric review id); item = Apple `trackId`/app id; "
           "author has a `uri` but no stable public user id")
-    print(f"- **Rating shape:** 1-5 stars. Observed in sample: {dist}")
+    print(f"- **Rating shape:** 1-5 stars. Observed in sample: {dist} "
+          f"(⚠️ sortby=mostrecent, so this is a RECENCY-BIASED window of {len(ratings)} "
+          f"reviews, not the app's lifetime rating distribution — do not present it as one)")
     print(f"- **Quality flags:** `im:voteCount` / `im:voteSum` present; "
           f"NO verified-purchase flag; app metadata entry on page 1 = {had_meta}")
     print("- **Data-quality limits noticed:** storefront-scoped (one country per pull), "
-          "hard page cap, no verified flag, legacy/undocumented endpoint")
+          "no verified-purchase flag, no corpus-size total, recency-biased ordering, "
+          "legacy/undocumented endpoint"
+          + (", page cap confirmed by probe" if (args.probe_cap and cap_reached)
+             else " (page cap NOT tested — omitted from this list on purpose)")
+          + (f", shallow feed depth: only {len(reviews)} reviews retrievable for this app"
+             if hit_empty and len(reviews) < 200 else ""))
     print("- **Maintenance/access risk:** HIGH-ish -- this RSS feed is a legacy, "
           "undocumented endpoint Apple does not publish support guarantees for. "
           "Record it as observed behavior, not a documented contract.")

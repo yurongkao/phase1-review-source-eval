@@ -34,14 +34,28 @@ Template to copy for each source:
 - **Repeatability:** re-pulled page 1 after ~2s: 20/20 same IDs, identical order = True
 - **ID scheme:** review = `recommendationid`; item = Steam `appid`; author = `author.steamid`
 - **Total corpus size (volume unit B):** query_summary.total_reviews = 2757984 (positive 2222310 / negative 535674) — unscoped (language=all, purchase_type=all) = whole corpus
-- **Reviews / representative item (volume unit A):** 2757984 addressable via cursor paging at up to 100 rows/call (the 20 rows above is the page size chosen, NOT a source limit)
+- **Reviews / representative item (volume unit A):** 40 rows retrieved over 2 pages at 20/call, no cap encountered. Steam reports 2,757,984 exist for this item, but how many are reachable through cursor paging before the cursor recycles is UNTESTED at this depth — the reported total is not the pullable amount.
 - **Rating shape:** boolean `voted_up` (thumbs up/down), NOT a 1-5 star scale -- note this, it matters for cross-source comparability
 - **Quality flags:** `steam_purchase`, `received_for_free`, `votes_up`, `votes_funny`, `weighted_vote_score`, `author.playtime_forever`
+- **⚠️ Scoping trap (measured):** `query_summary.total_reviews` moves by ~192× depending on two params with non-obvious defaults. Steam's default `purchase_type=steam` excludes non-purchasers, which for a free-to-play title like Dota 2 hides almost the entire corpus: 14,380 scoped vs 2,757,984 unscoped. Any recurring pipeline must pin `language` and `purchase_type` explicitly or its volume numbers are silently wrong.
 - **Raw sample saved to:** `samples/steam_dota2.json`
 
 ## Apple App Store
-- **Pull date:** TBD (Fri 8/14)
-- (fill from `scripts/apple_rss_reviews.py` output)
+- **Pull date:** 2026-08-15
+- **Endpoint used:** https://itunes.apple.com/us/rss/customerreviews/page=<n>/id=284882215/sortby=mostrecent/json
+- **Item sampled:** app id 284882215 (us storefront)
+- **Fields actually returned (raw entry keys):** author, content, id, im:contentType, im:rating, im:version, im:voteCount, im:voteSum, link, title, updated
+- **Rows returned per page:** [50, 0] (page-by-page, not an average) — 50 rows total across 1 non-empty page(s)
+- **Pagination behavior:** `page=<n>` path segment. Last page with rows = page 1; end of feed signalled by an empty page. Probed to 15 pages, so the ~10-page cap claim IS tested here.
+- **Total corpus size (volume unit B):** ⚠️ NOT EXPOSED. The RSS feed publishes no review-count total for an app, so the addressable corpus size is unknowable from this source — you can only report what you pulled. This is a real asymmetry vs Steam (which reports `total_reviews`) and it limits any volume comparison.
+- **Reviews / representative item (volume unit A):** 50 retrieved; this IS the ceiling for this app (probe walked to exhaustion).
+- **Repeatability:** re-pulled page 1 after ~2s: 50/50 same IDs, identical order = True
+- **ID scheme:** review = `id.label` (numeric review id); item = Apple `trackId`/app id; author has a `uri` but no stable public user id
+- **Rating shape:** 1-5 stars. Observed in sample: {'1': 20, '2': 7, '3': 3, '4': 2, '5': 18} (⚠️ sortby=mostrecent, so this is a RECENCY-BIASED window of 50 reviews, not the app's lifetime rating distribution — do not present it as one)
+- **Quality flags:** `im:voteCount` / `im:voteSum` present; NO verified-purchase flag; app metadata entry on page 1 = False
+- **Data-quality limits noticed:** storefront-scoped (one country per pull), no verified-purchase flag, no corpus-size total, recency-biased ordering, legacy/undocumented endpoint, page cap confirmed by probe
+- **Maintenance/access risk:** HIGH-ish -- this RSS feed is a legacy, undocumented endpoint Apple does not publish support guarantees for. Record it as observed behavior, not a documented contract.
+- **Raw sample saved to:** `samples/apple_facebook.json`
 
 ## Amazon Reviews 2023
 - **Pull date:** TBD (Sat 8/15)
