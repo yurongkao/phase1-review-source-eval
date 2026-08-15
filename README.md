@@ -3,7 +3,7 @@
 Evidence-based evaluation of candidate review-data sources for Phase 1 ingestion.
 Prepared for John · updated 2026-08.
 
-## The framing (what John asked for)
+## The framing 
 
 We are **not** ranking sources against a single "best" bar. We evaluate each source
 for fitness against **two distinct jobs**, and recommend a best source for each:
