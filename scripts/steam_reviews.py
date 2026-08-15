@@ -25,28 +25,48 @@ import urllib.request
 BASE = "https://store.steampowered.com/appreviews/{appid}"
 
 
-def fetch_page(appid: int, cursor: str = "*", num: int = 20,
-               filt: str = "recent") -> dict:
-    """One page. Raises on network/HTTP failure so we never mistake it for 'end of data'."""
-    params = {
+def build_params(num, filt, language, cursor, purchase_type="all"):
+    """The params that ACTUALLY go on the wire. Kept in one place so the endpoint
+    printed into test_notes.md is the endpoint that was called -- an endpoint string
+    that omits a filter is not reproducible, and 'reproducible' is the deliverable.
+
+    ⚠️ Two params silently scope query_summary.total_reviews. BOTH must be set
+    explicitly or the 'total corpus size' number is a filtered subset wearing the
+    label of a total:
+      - language:      omit it and you get one language, not the corpus.
+      - purchase_type: Steam's default is 'steam', i.e. reviews from accounts that
+                       PURCHASED the game on Steam. For a free-to-play title that
+                       excludes most of the playerbase. Set 'all' to include them.
+    """
+    return {
         "json": 1,
         "filter": filt,          # 'recent' = newest-first, the fairest repeatability test
-        "language": "english",
+        "language": language,
+        "purchase_type": purchase_type,
         "num_per_page": num,     # Steam caps this at 100
         "cursor": cursor,        # '*' for the first page; urlencode handles the escaping
     }
+
+
+def fetch_page(appid: int, cursor: str = "*", num: int = 20,
+               filt: str = "recent", language: str = "all",
+               purchase_type: str = "all") -> dict:
+    """One page. Raises on network/HTTP failure so we never mistake it for 'end of data'."""
+    params = build_params(num, filt, language, cursor, purchase_type)
     url = BASE.format(appid=appid) + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": "phase1-eval/0.1"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
 
-def collect(appid: int, pages: int, num: int = 20) -> tuple[list, dict, list]:
+def collect(appid: int, pages: int, num: int = 20, language: str = "all",
+            purchase_type: str = "all") -> tuple[list, dict, list]:
     """Returns (reviews, query_summary_from_page_1, pagination_log)."""
     reviews, cursor, seen_cursors, log = [], "*", set(), []
     summary = {}
     for i in range(pages):
-        data = fetch_page(appid, cursor, num)
+        data = fetch_page(appid, cursor, num, language=language,
+                          purchase_type=purchase_type)
         if data.get("success") != 1:
             log.append(f"page {i+1}: success != 1 -> {data}")
             break
@@ -77,11 +97,56 @@ def main() -> None:
     ap.add_argument("--num", type=int, default=20, help="rows per page (Steam max 100)")
     ap.add_argument("--repeat", action="store_true",
                     help="re-pull page 1 to test repeatability")
+    ap.add_argument("--language", default="all",
+                    help="Steam language filter. 'all' = whole corpus. Anything else "
+                         "(e.g. 'english') SCOPES query_summary.total_reviews to that "
+                         "language -- do not report a scoped number as total corpus size.")
+    ap.add_argument("--purchase-type", default="all", choices=["all", "steam", "non_steam_purchase"],
+                    help="Steam's own default is 'steam' (purchasers only), which "
+                         "undercounts free-to-play titles badly. 'all' = everyone.")
+    ap.add_argument("--probe-depth", type=int, metavar="N",
+                    help="page N times at 100 rows/call to find how deep cursor paging "
+                         "actually goes before the cursor recycles. This is the REAL "
+                         "'realistic sample size' number John asked for.")
+    ap.add_argument("--probe-scope", action="store_true",
+                    help="pull total_reviews under several param combinations to SHOW "
+                         "how much the 'total corpus' number moves with scoping")
     ap.add_argument("--out", default="../samples/steam_sample.json")
     args = ap.parse_args()
 
+    if args.probe_scope:
+        print("Scope probe -- query_summary.total_reviews under different params:")
+        combos = [("all", "all"), ("all", "steam"), ("english", "all"), ("english", "steam")]
+        for lang, ptype in combos:
+            try:
+                d = fetch_page(args.appid, "*", 1, language=lang, purchase_type=ptype)
+                qs = d.get("query_summary", {})
+                print(f"  language={lang:<8} purchase_type={ptype:<8} -> "
+                      f"total_reviews={qs.get('total_reviews')}")
+            except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
+                raise SystemExit(f"NETWORK/HTTP FAILURE during probe: {exc}") from exc
+            time.sleep(1)
+        print("\nThe spread between these IS the finding. Record the params alongside "
+              "any number you report.\n")
+
+    if args.probe_depth:
+        print(f"Depth probe -- paging up to {args.probe_depth} x 100 rows to find the "
+              f"cursor ceiling...")
+        deep, _, deep_log = collect(args.appid, args.probe_depth, 100,
+                                    language=args.language,
+                                    purchase_type=args.purchase_type)
+        stopped = next((l for l in deep_log if "stopping" in l), None)
+        unique = len({r.get("recommendationid") for r in deep})
+        print(f"  retrieved {len(deep)} rows ({unique} unique ids) over "
+              f"{len(deep_log)} page(s)")
+        print(f"  stop reason: {stopped or 'no stop hit — ceiling is deeper than this probe'}")
+        print(f"  -> volume unit A, measured: {unique} reviews pullable at depth "
+              f"{args.probe_depth}\n")
+
     try:
-        reviews, summary, log = collect(args.appid, args.pages, args.num)
+        reviews, summary, log = collect(args.appid, args.pages, args.num,
+                                        language=args.language,
+                                        purchase_type=args.purchase_type)
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
         # Fail loudly. A network error is NOT evidence about the source.
         raise SystemExit(
@@ -97,7 +162,8 @@ def main() -> None:
     repeat_note = "not tested (pass --repeat)"
     if args.repeat and reviews:
         time.sleep(2)
-        again, _, _ = collect(args.appid, 1, args.num)
+        again, _, _ = collect(args.appid, 1, args.num, language=args.language,
+                              purchase_type=args.purchase_type)
         first_ids = [r.get("recommendationid") for r in reviews[:args.num]]
         again_ids = [r.get("recommendationid") for r in again]
         overlap = len(set(first_ids) & set(again_ids))
@@ -130,7 +196,10 @@ def main() -> None:
     print("PASTE INTO test_notes.md UNDER '## Steam'")
     print("=" * 60)
     print(f"- **Pull date:** {time.strftime('%Y-%m-%d')}")
-    print(f"- **Endpoint used:** {BASE.format(appid=args.appid)}?json=1&filter=recent&num_per_page={args.num}")
+    endpoint = (BASE.format(appid=args.appid) + "?" +
+                urllib.parse.urlencode(build_params(args.num, "recent", args.language,
+                                                    "*", args.purchase_type)))
+    print(f"- **Endpoint used:** {endpoint}")
     print(f"- **Item sampled:** appid {args.appid}")
     print(f"- **Fields actually returned:** {', '.join(fields)}")
     for k, v in nested.items():
@@ -142,10 +211,21 @@ def main() -> None:
     print(f"- **Repeatability:** {repeat_note}")
     print("- **ID scheme:** review = `recommendationid`; item = Steam `appid`; "
           "author = `author.steamid`")
+    scope_bits = [f"language={args.language}", f"purchase_type={args.purchase_type}"]
+    unscoped = args.language == "all" and args.purchase_type == "all"
+    scope = ("unscoped (" + ", ".join(scope_bits) + ") = whole corpus" if unscoped
+             else "⚠️ SCOPED (" + ", ".join(scope_bits) + ") -- NOT the total corpus")
     print(f"- **Total corpus size (volume unit B):** query_summary.total_reviews = "
           f"{summary.get('total_reviews', 'n/a')} "
           f"(positive {summary.get('total_positive', 'n/a')} / "
-          f"negative {summary.get('total_negative', 'n/a')})")
+          f"negative {summary.get('total_negative', 'n/a')}) — {scope}")
+    print(f"- **Reviews / representative item (volume unit A):** "
+          f"{len(reviews)} rows actually retrieved over {args.pages} page(s) at "
+          f"{args.num}/call, no cap encountered. Steam reports "
+          f"{summary.get('total_reviews', 'n/a')} exist for this item, but how many are "
+          f"reachable through cursor paging before the cursor recycles is UNTESTED at "
+          f"this depth — do not report the reported-total as the pullable amount. "
+          f"Run --probe-depth to find the real ceiling.")
     print("- **Rating shape:** boolean `voted_up` (thumbs up/down), NOT a 1-5 star scale "
           "-- note this, it matters for cross-source comparability")
     print("- **Quality flags:** `steam_purchase`, `received_for_free`, "
