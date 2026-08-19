@@ -1,26 +1,4 @@
 # Test Notes — per-source sample findings
-
-Record what the **sample pull actually returned**, not what the docs claim. Fill Fri–Sat.
-
-Template to copy for each source:
-
----
-
-## <Source name>
-
-- **Pull date:**
-- **Endpoint / file used:**
-- **Item sampled (id + name):**
-- **Fields actually returned:** (list every field key seen in the raw response)
-- **Rows returned in one call:**
-- **Pagination behavior:** (cursor? page param? hard cap? how to get the next page)
-- **Repeatability:** (re-pull same item → same rows? ordering stable? any randomness?)
-- **ID scheme:** (what uniquely identifies a review / an item)
-- **Rating shape:** (scale, distribution you observed in the sample)
-- **Quality flags:** (verified / helpful / vote counts present?)
-- **Data-quality limits noticed:** (dupes, truncation, missing fields, language mix)
-- **Raw sample saved to:** `samples/<file>`
-
 ---
 
 ## Steam
