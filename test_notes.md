@@ -2,7 +2,6 @@
 ---
 
 ## Steam
-- **Pull date:** 2026-08-15
 - **Endpoint used:** https://store.steampowered.com/appreviews/570?json=1&filter=recent&language=all&purchase_type=all&num_per_page=20&cursor=%2A
 - **Item sampled:** appid 570
 - **Fields actually returned:** app_release_date, author, comment_count, language, primarily_steam_deck, reactions, received_for_free, recommendationid, refunded, review, steam_purchase, timestamp_created, timestamp_updated, voted_up, votes_funny, votes_up, weighted_vote_score, written_during_early_access
@@ -11,7 +10,7 @@
 - **Pagination behavior:** opaque `cursor` token, `*` for page 1, next token returned in the response body; cursor repeats when exhausted
 - **Repeatability:** re-pulled page 1 after ~2s: 20/20 same IDs, identical order = True
 - **ID scheme:** review = `recommendationid`; item = Steam `appid`; author = `author.steamid`
-- **⚠️ UNIT MISLABEL — corrected 2026-08-18.** This figure was recorded here as "volume unit B." It is **not**. By the convention in `scorecard.md`, unit B is the source's *full addressable corpus across all items*; 2,757,984 is the count for **one title**, which is unit A. Filed under B it would sit next to Amazon's 571.54M-review whole-dataset figure and invite a comparison between one game and thirty-three product categories. **Steam's unit B is not measured** — it would require enumerating every appid. Recording this rather than deleting it: John's feedback named consistent volume units specifically, and this is exactly the error he was pointing at, found in my own notes.
+- **⚠️ UNIT MISLABEL** This figure was recorded here as "volume unit B." It is **not**. By the convention in `scorecard.md`, unit B is the source's *full addressable corpus across all items*; 2,757,984 is the count for **one title**, which is unit A. Filed under B it would sit next to Amazon's 571.54M-review whole-dataset figure and invite a comparison between one game and thirty-three product categories. **Steam's unit B is not measured** — it would require enumerating every appid. Recording this rather than deleting it: John's feedback named consistent volume units specifically, and this is exactly the error he was pointing at, found in my own notes.
 - **Reviews for this title (volume unit A, source-reported):** query_summary.total_reviews = 2757984 (positive 2222310 / negative 535674) — unscoped (language=all, purchase_type=all)
 - **Total corpus size (volume unit B):** **NOT MEASURED.** Requires enumerating all appids; out of scope for this deliverable.
 - **Reviews / representative item (volume unit A):** 40 rows retrieved over 2 pages at 20/call, no cap encountered. Steam reports 2,757,984 exist for this item, but how many are reachable through cursor paging before the cursor recycles is UNTESTED at this depth — the reported total is not the pullable amount.
@@ -19,12 +18,11 @@
 - **Quality flags:** `steam_purchase`, `received_for_free`, `votes_up`, `votes_funny`, `weighted_vote_score`, `author.playtime_forever`
 - **⚠️ Scoping trap (measured):** `query_summary.total_reviews` moves by ~192× depending on two params with non-obvious defaults. Steam's default `purchase_type=steam` excludes non-purchasers, which for a free-to-play title like Dota 2 hides almost the entire corpus: 14,380 scoped vs 2,757,984 unscoped. Any recurring pipeline must pin `language` and `purchase_type` explicitly or its volume numbers are silently wrong.
 - **Data-quality limits noticed:** `refunded` / `received_for_free` / `written_during_early_access` rows are all included by default — each is a deliberate inclusion/exclusion decision for a pipeline, not a given.
-  - ✅ **Language skew, now MEASURED (2026-08-18) instead of asserted.** The note previously said only "multilingual corpus; `language` field varies," which states nothing a reader can act on. Counted from the saved sample: **russian 31 · english 3 · ukrainian 3 · schinese 1 · italian 1** out of 40 rows — **77.5% Russian, 7.5% English.** Decision-relevant: an English-only downstream model would discard ~92% of this window. ⚠️ Scope: 40 rows from a `filter=recent` window on one title, so this is the *recent-review* language mix for Dota 2, **not** the title's lifetime mix and not Steam's.
+  - ✅ **Language skew** The note previously said only "multilingual corpus; `language` field varies," which states nothing a reader can act on. Counted from the saved sample: **russian 31 · english 3 · ukrainian 3 · schinese 1 · italian 1** out of 40 rows — **77.5% Russian, 7.5% English.** Decision-relevant: an English-only downstream model would discard ~92% of this window. ⚠️ Scope: 40 rows from a `filter=recent` window on one title, so this is the *recent-review* language mix for Dota 2, **not** the title's lifetime mix and not Steam's.
   - 🐛 **CORRECTION — the `weighted_vote_score` type claim was wrong.** These notes said it "returns as a string, not a float." The saved sample says otherwise: **40/40 rows are JSON `float`**, and the pull script does no type coercion (checked). But the sharper point is that the sample cannot settle the question either way — **all 40 rows carry the identical default value `0.5` with `votes_up = 0`**, so no review with actual votes was observed. Corrected reading: *"observed as JSON float `0.5` in all 40 sampled rows; every sampled review had zero votes, so the type of a populated score is untested."* Same species as the errors logged all fortnight — a claim stated with more confidence than the evidence carries.
 - **Raw sample saved to:** `samples/steam_dota2.json`
 
 ## Apple App Store
-- **Pull date:** 2026-08-15
 - **Endpoint used:** https://itunes.apple.com/us/rss/customerreviews/page=<n>/id=284882215/sortby=mostrecent/json
 - **Item sampled:** app id 284882215 (us storefront)
 - **Fields actually returned (raw entry keys):** author, content, id, im:contentType, im:rating, im:version, im:voteCount, im:voteSum, link, title, updated
@@ -41,7 +39,6 @@
 - **Raw sample saved to:** `samples/apple_facebook.json`
 
 ## Amazon Reviews 2023
-- **Pull date:** 2026-08-16
 - **Endpoint / file used:** https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023/resolve/main/raw/review_categories/All_Beauty.jsonl
 - **Item sampled:** category `All_Beauty`, **first 2000 lines (head of file, NOT a random sample)** — 1677 distinct parent_asin, 845 distinct users
 - **Fields actually returned:** asin, helpful_vote, images, parent_asin, rating, text, timestamp, title, user_id, verified_purchase
@@ -50,7 +47,7 @@
 - **Repeatability:** perfect by construction -- static versioned file, same bytes every read (contrast with the live APIs)
 - **ID scheme:** review has no standalone id — identity is (user_id, parent_asin, timestamp); item = `asin` / `parent_asin`
 - **Total corpus size (volume unit B):** ~416,686–637,975 reviews ESTIMATED (file 326,611,506 bytes via `content-length`, divided by mean bytes-per-row measured in two windows: 784 at the head, 512 mid-file). Range, not a point value — the two windows disagree on row size by 35%. ⚠️ **Superseded — see the card figure directly below.** (The script's framing that "no review count exists" was true of the *data file*, but the dataset **card** publishes one; the estimate should never have been the headline number.)
-  - ✅ **AUTHORITATIVE FIGURE (dataset card, checked 2026-08-16): All_Beauty = 701.5K reviews** (632.0K users, 112.6K items, 31.6M review tokens). **Use this number in the scorecard**, labelled as a documentation figure.
+  - ✅ **AUTHORITATIVE FIGURE: All_Beauty = 701.5K reviews** (632.0K users, 112.6K items, 31.6M review tokens). **Use this number in the scorecard**, labelled as a documentation figure.
   - ⚠️ **The byte-based estimate MISSED, and that is worth recording.** 417k–638k does **not** contain 701.5K — it undershot by ~10% even at the top of the range. Cause: both sampling windows measured row sizes (784 and 512 bytes) above the file's true average, so the two windows were biased in the *same* direction. **A range built from two samples is not a confidence interval.** Kept here deliberately: the method was reasonable, it was checkable, and it was wrong — which is exactly the standard of evidence this deliverable is arguing for. Where a source publishes a real count (Steam's `query_summary`, this card), that count wins; byte estimation is a last resort for sources that publish nothing (Apple).
   - Whole-dataset context from the card: **571.54M reviews · 54.51M users · 48.19M items · 33 categories · May 1996 – Sep 2023 · 750 GB total.** Largest corpus in the shortlist by orders of magnitude.
   - ⚠️ Label inconsistency in the card: the per-category table heads this column **#Rating** while the version-comparison table calls the equivalent **#Review**. Treating them as the same quantity; noting it rather than silently assuming.
@@ -87,7 +84,6 @@
 - **Raw sample saved to:** `samples/amazon_all_beauty.json`
 
 ## Google Play
-- **Pull date:** 2026-08-15
 - **Endpoint / file used:** google-play-scraper -> Google internal `batchexecute` (UNDOCUMENTED, no public reviews API exists)
 - **Item sampled:** com.facebook.katana (us/en)
 - **Fields actually returned:** appVersion, at, content, repliedAt, replyContent, reviewCreatedVersion, reviewId, score, thumbsUpCount, userImage, userName
@@ -109,7 +105,7 @@ placeholder value in `BESTBUY_API_KEY`, which the API rejected with **HTTP 403**
 403 means only "this string is not a valid key." It is not evidence of anything about
 Best Buy. No rows were retrieved, so every observational cell below stays empty.
 
-- **Pull date:** not sampled — no key held; 2026-08-17 attempt used a placeholder
+- **Pull date:** not sampled — no key held; 
 - **Endpoint / file used:** `https://api.bestbuy.com/v1/reviews(sku={sku})` — official,
   documented, key-required. *Recorded from documentation; not confirmed by a successful call.*
 - **Item sampled:** none
