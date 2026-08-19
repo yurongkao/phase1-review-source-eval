@@ -38,7 +38,7 @@ deliverable exists to correct.
 ⚠️ **A source scoring the same in both Fit rows is a warning sign** — it usually means the
 source was rated rather than the fit, which is the single-bar ranking this evaluation rejects.
 
-## Scorecard — John's dimensions
+## Scorecard 
 
 | Dimension | Steam | Apple App Store | Amazon Reviews 2023 | Google Play | Best Buy |
 |---|---|---|---|---|---|
