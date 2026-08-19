@@ -56,10 +56,38 @@ Two separate, clearly-defined columns — never app-counts as a volume proxy:
 ## Status
 
 - [x] Repo skeleton + scorecard scaffold
-- [ ] Steam + Apple RSS samples
-- [ ] Amazon slice + Google Play / Best Buy samples
-- [ ] Test the two cross-source claims
+- [x] Steam + Apple RSS samples
+- [x] Amazon slice (+ licensing review) + Google Play sample
+- [ ] **Best Buy — not sampled.** No API key obtained; see `test_notes.md`
+- [x] Claim 1 (Apple ≈ Google Play) tested on the same product
+- [ ] **Claim 2 (Best Buy ≈ Amazon) — not tested.** One side has no sample
 - [ ] Fill scorecard from evidence + write the two recommendations
 
-Sources not yet sampled are marked **"not sampled — pending"** in the scorecard rather
-than filled from documentation. Documentation-based cells are labelled as such.
+**4 of 5 sources sampled; 1 of 2 claims tested.** The gaps are stated rather than filled.
+
+## How to read the evidence labels
+
+Every scorecard cell carries its provenance:
+
+- **[sampled]** — measured from a pull committed in `samples/`.
+- **[doc]** — from the source's own documentation, not verified by a pull.
+- **not sampled — pending** — no evidence exists.
+
+Sources not yet sampled are marked **"not sampled — pending"** rather than filled from
+documentation, and no observational cell is ever back-filled from a doc claim. Where a
+sample and the documentation disagree, the sample is reported and the disagreement is
+recorded — that happened twice here (Amazon's two official docs publish different field
+names; a byte-based corpus estimate missed the card's published count by ~10%).
+
+## Reproducing any of this
+
+```bash
+python scripts/steam_reviews.py          # key-free
+python scripts/apple_rss_reviews.py      # key-free
+python scripts/google_play_reviews.py    # needs: pip install google-play-scraper
+python scripts/amazon_2023_slice.py --probe-middle
+python scripts/compare_shapes.py --a samples/apple_facebook.json \
+                                 --b samples/googleplay_facebook.json
+```
+
+Every sample in `samples/` was produced by the script of the same name.
